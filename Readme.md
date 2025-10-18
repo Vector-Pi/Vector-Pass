@@ -1,5 +1,5 @@
-```markdown```
-# 🔐 Secure Password Manager - User Guide
+
+# 🔐 Vector-Pass - User Guide
 
 ## 📖 Table of Contents
 - [Introduction](#introduction)
@@ -14,7 +14,7 @@
 
 ## 🌟 Introduction
 
-Welcome to the **Secure Password Manager** - a comprehensive password management solution that combines strong password generation with military-grade encryption. This application features:
+Welcome to the **Vector-Pass** - a comprehensive password management solution that combines strong password generation with military-grade encryption. This application features:
 
 - **Smart Password Generation** with leaked password detection
 - **Dual-Layer Encryption** (AES + GPG)

@@ -31,7 +31,7 @@ class SecurePasswordManager:
     
     def print_banner(self):
         banner = """
-        🔐 Secure Password Manager 🔐
+        🔐 Vector-Pass 🔐
         =============================
         • Generate Strong Passwords
         • Check Password Strength  
@@ -523,7 +523,7 @@ class SecurePasswordManager:
             elif choice == '3':
                 self.password_manager_menu()
             elif choice == '4':
-                print("\n👋 Thank you for using Secure Password Manager!")
+                print("\n👋 Thank you for using Vector-Pass!")
                 print("🔒 Stay secure!")
                 break
             else:
