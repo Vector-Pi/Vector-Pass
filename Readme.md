@@ -144,9 +144,17 @@ You need both to decrypt. Don't store them in the same place.
 
 ## Offline Breach Detection
 
-Vector-Pass checks passwords against local wordlists (RockYou, darkc0de, etc.) without ever touching a network. Drop `.txt` files into `data/leaked_passwords/` and the tool picks them up.
+Vector-Pass checks passwords against local wordlists without ever touching a network. Drop `.txt` files into `data/leaked_passwords/` and the tool picks them up.
 
-For large wordlists (millions of entries), the Bloom filter keeps things fast:
+A small sample wordlist is included for testing. For comprehensive breach detection, you can expand your wordlist database with additional files.
+
+### Expanding Your Wordlist Database
+
+To enhance Vector-Pass's breach detection capabilities, you can add more wordlists to the `data/leaked_passwords/` directory:
+
+1. Download wordlists from reputable sources like SecLists (https://github.com/danielmiessler/SecLists/tree/master/Passwords)
+2. Place `.txt` files in the `data/leaked_passwords/` directory
+3. Run the Bloom filter builder to optimize for performance:
 
 ```bash
 # Build the filter from your wordlists

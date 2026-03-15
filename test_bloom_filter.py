@@ -46,7 +46,7 @@ def test_bloom_filter():
     for pwd in unknown_passwords:
         result = bf.check(pwd)
         if result:
-            print(f"⚠ False positive for '{pwd}'")
+            print(f"[!] False positive for '{pwd}'")
             false_positives += 1
         else:
             print(f"✓ Correctly identified '{pwd}' as not in set")
