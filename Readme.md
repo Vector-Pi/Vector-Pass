@@ -1,438 +1,238 @@
+# Vector-Pass
 
-# 🔐 Vector-Pass - User Guide
+A local-first, offline password manager built for people who actually care where their data lives.
 
-## 📖 Table of Contents
-- [Introduction](#introduction)
+No cloud sync. No telemetry. No account creation. No phoning home. Your passwords stay on your machine, encrypted under your keys, and that's the end of it.
+
+## Table of Contents
+- [Why This Exists](#why-this-exists)
+- [Features](#features)
 - [System Requirements](#system-requirements)
 - [Installation](#installation)
 - [GPG Setup](#gpg-setup)
-- [Configuration Files](#configuration-files)
-- [First Time Setup](#first-time-setup)
-- [Using the Application](#using-the-application)
+- [Usage](#usage)
+- [Offline Breach Detection](#offline-breach-detection)
 - [Troubleshooting](#troubleshooting)
-- [Security Best Practices](#security-best-practices)
+- [Security Model](#security-model)
+- [Security Hardening](#security-hardening)
+- [License](#license)
 
-## 🌟 Introduction
+## Why This Exists
 
-Welcome to the **Vector-Pass** - a comprehensive password management solution that combines strong password generation with military-grade encryption. This application features:
+Every major password manager eventually wants your data in their cloud. They'll call it "sync" or "backup" or "convenience," but at the end of the day your secrets are sitting on someone else's server, protected by their policies, and subject to their breach disclosures.
 
-- **Smart Password Generation** with leaked password detection
-- **Dual-Layer Encryption** (AES + GPG)
-- **Password Strength Analysis**
-- **Secure Encrypted Vault** storage
-- **Cross-platform Compatibility**
+Vector-Pass takes a different approach: everything happens locally. Password generation, strength analysis, breach detection against wordlists -- all of it runs on your machine without a single network call. The vault is encrypted with both AES-256 and GPG-4096, so even if someone lifts the file, they need both your passphrase and your GPG key to get anywhere.
 
-## 💻 System Requirements
+Built for people who prefer `gpg --full-generate-key` over "Sign in with Google."
 
-### Minimum Requirements
-- **OS**: Windows 10+, macOS 10.13+, or Ubuntu 18.04+
-- **Python**: 3.8 or higher
-- **RAM**: 4GB
-- **Storage**: 200MB free space
+## Features
 
-### Recommended
-- **OS**: Windows 11, macOS 12+, or Ubuntu 20.04+
-- **Python**: 3.9+
-- **RAM**: 8GB
-- **Storage**: 500MB free space
+- **Fully offline** -- zero network calls for any password operation
+- **Dual-layer encryption** -- AES-256 (PBKDF2 key derivation, 100k iterations) + GPG-4096 RSA
+- **Local breach detection** -- checks passwords against leaked wordlists without uploading anything
+- **Bloom filter acceleration** -- handles 50M+ leaked passwords in ~50MB of memory
+- **Terminal interface** -- clean menu-driven TUI, no GUI dependencies
+- **Portable vaults** -- encrypted vault files you can back up anywhere
 
-## 🚀 Installation
+## System Requirements
 
-### Step 1: Install Python Dependencies
+- **OS**: Linux (any distro with GPG >= 2.2), macOS 10.13+, or Windows 10+ with WSL
+- **Python**: 3.8+
+- **GPG**: 2.2+
+- **RAM**: 4GB recommended (for large wordlist processing)
+- **Storage**: 200MB base + space for your wordlists
+
+### Installing Dependencies
 
 ```bash
-# Clone or download the project files
-cd password_manager
+# Arch
+sudo pacman -S python python-pip gnupg
 
-# Install required packages
+# Debian/Ubuntu
+sudo apt install python3 python3-pip gnupg2
+
+# macOS
+brew install python gnupg
+```
+
+## Installation
+
+```bash
+# Clone
+git clone https://github.com/yourusername/Vector-Pass.git
+cd Vector-Pass
+
+# Set up a venv (don't install into system Python)
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-If you don't have a `requirements.txt`, install manually:
-
-```bash
-pip install cryptography>=3.4.8
-pip install python-gnupg>=0.4.8
-pip install passlib>=1.7.4
-pip install pyperclip>=1.8.2
-pip install colorama>=0.4.4
-```
-
-### Step 2: Install GPG
-
-#### 🪟 Windows
-1. Download from [Gpg4win](https://www.gpg4win.org/)
-2. Run the installer with administrative privileges
-3. Choose "Complete" installation
-4. Add to PATH during installation
-5. Restart your command prompt/terminal
-
-#### 🍎 macOS
-```bash
-# Using Homebrew
-brew install gnupg
-
-# OR using MacPorts
-sudo port install gnupg
-```
-
-#### 🐧 Linux (Ubuntu/Debian)
-```bash
-sudo apt update
-sudo apt install gnupg gnupg-agent pinentry-curses
-```
-
-#### 🐧 Linux (CentOS/RHEL/Fedora)
-```bash
-# CentOS/RHEL
-sudo yum install gnupg2
-
-# Fedora
-sudo dnf install gnupg2
-```
-
-### Step 3: Verify GPG Installation
-
-Open a new terminal/command prompt and run:
+Verify everything works:
 ```bash
 gpg --version
+python main.py --help
 ```
 
-You should see output similar to:
-```
-gpg (GnuPG) 2.2.27
-libgcrypt 1.8.7
-```
+## GPG Setup
 
-## 🔐 GPG Setup
+Vector-Pass needs a GPG key for the second encryption layer. If you already have one, you can use it. Otherwise:
 
-### Creating Your GPG Key
-
-1. **Open terminal/command prompt**
-
-2. **Generate a new key pair:**
-   ```bash
-   gpg --full-generate-key
-   ```
-
-3. **Follow the prompts:**
-   - **Key type**: Press Enter for default (RSA and RSA)
-   - **Key size**: Enter `4096`
-   - **Expiration**: Choose based on your preference (e.g., `1y` for 1 year)
-   - **Real name**: Enter your full name
-   - **Email address**: Enter your email
-   - **Comment**: Optional comment
-   - **Passphrase**: Choose a **strong passphrase** (you'll need this later)
-
-4. **Note your key ID:**
-   After generation, you'll see something like:
-   ```
-   gpg: key A1B2C3D4E5F6G7H8 marked as ultimately trusted
-   ```
-   Write down `A1B2C3D4E5F6G7H8` (your actual key ID will be different)
-
-### Alternative Key Generation (Quick)
 ```bash
-gpg --batch --generate-key <<EOF
-%echo Generating a key...
-Key-Type: RSA
-Key-Length: 4096
-Subkey-Type: RSA
-Subkey-Length: 4096
-Name-Real: Your Name
-Name-Email: your.email@example.com
-Expire-Date: 1y
-Passphrase: your-strong-passphrase-here
-%commit
-%echo Key generated!
+# Generate a 4096-bit RSA key
+gpg --full-generate-key
+
+# Recommended settings:
+#   Key type: RSA (sign and encrypt), 4096-bit
+#   Expiry: 1y (rotate regularly)
+#   Comment: "Vector-Pass" or similar
+```
+
+### Hardened GPG config (optional but recommended)
+
+```bash
+chmod 700 ~/.gnupg
+
+cat > ~/.gnupg/gpg.conf << EOF
+personal-cipher-preferences AES256 AES192 AES
+personal-digest-preferences SHA512 SHA384 SHA256
+personal-compress-preferences ZLIB BZIP2 ZIP Uncompressed
+cert-digest-algo SHA512
+default-preference-list SHA512 SHA384 SHA256 AES256 AES192 AES ZLIB BZIP2 ZIP Uncompressed
+cipher-algo AES256
+digest-algo SHA512
+compress-algo 2
+fixed-list-mode
+keyid-format 0xlong
+list-options show-uid-validity
+verify-options show-uid-validity
+with-fingerprint
+require-cross-certification
+no-symkey-cache
+throw-keyids
 EOF
 ```
 
-## ⚙️ Configuration Files
-
-### Creating the .gnupg Directory
-
-The application will automatically create the necessary directory structure, but you can manually configure GPG for optimal security.
-
-#### 🪟 Windows
-Create folder: `C:\Users\YourUsername\.gnupg\`
-
-#### 🐧 Linux/macOS
-The folder `~/.gnupg/` should be created automatically when you generate your first key.
-
-### Creating gpg.conf
-
-Create/edit the file: `~/.gnupg/gpg.conf` (Linux/macOS) or `%USERPROFILE%\.gnupg\gpg.conf` (Windows)
-
-```conf
-use-agent
-pinentry-mode loopback
-```
-
-### Creating gpg-agent.conf
-
-Create/edit the file: `~/.gnupg/gpg-agent.conf` (Linux/macOS) or `%USERPROFILE%\.gnupg\gpg-agent.conf` (Windows)
-
-```conf
-allow-loopback-pinentry
-```
-
-
-### Reload GPG Agent
-
-After creating configuration files:
+## Usage
 
 ```bash
-# Restart the agent
-echo RELOADAGENT | gpg-connect-agent
-```
-
-## 🛠️ First Time Setup
-
-### Step 1: Add Additional Leaked Password Databases (If Required)
-*Some of the files are already added in the directory, add only if you want additional security, adding will increase loading time of the program* 
-
-1. **Download common password lists:**
-   - [RockYou.txt](https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt) (~140MB)
-   - [10-million-password-list-top-1000000.txt](https://github.com/danielmiessler/SecLists/raw/master/Passwords/Common-Credentials/10-million-password-list-top-1000000.txt)
-
-2. **Place files in the data directory:**
-   ```
-   password_manager/
-   └── data/
-       └── leaked_passwords/
-           ├── rockyou.txt
-           └── common_passwords.txt
-   ```
-
-   *Note: The application will work without these files, but leaked password detection will be limited.*
-
-### Step 2: Run the Application
-*Please be patient, it takes around one minute to load, if you want better performance, you may remove some of the files from data/leaked_passwords directory however doing it is not reccomended*
-```bash
-cd password_manager
+source venv/bin/activate
 python main.py
 ```
 
-### Step 3: Initial Vault Setup
+The main menu gives you three paths:
 
-When you first run the application:
+1. **Generate Password** -- creates a password of specified length, checks it against breach wordlists, optionally saves to vault
+2. **Check Password Strength** -- entropy calculation, pattern detection, breach check, crack time estimate
+3. **Password Manager** -- create/load encrypted vaults, add/search/delete entries
 
-1. **Choose "Manage Passwords"** from the main menu
-2. **Set up your vault:**
-   - Enter a vault name (or press Enter for default)
-   - Set a strong AES encryption password
-   - Confirm the password
+### Vault security
 
-3. **The application will:**
-   - Create the encrypted vault
-   - Set up GPG encryption with your key
-   - Create necessary directory structures
+Each vault is protected by two independent layers:
+1. **AES password** -- your master passphrase (PBKDF2-HMAC-SHA256, 100k iterations)
+2. **GPG key** -- your cryptographic identity
 
-## 📱 Using the Application
+You need both to decrypt. Don't store them in the same place.
 
-### Main Menu Options
+### Navigation
+- Arrow keys or numbers to select
+- `Enter` to confirm
+- `Esc`/`q` to go back
+- `Ctrl+C` to bail out
 
-#### 1. Generate Password
-- **Customizable length** (8-64 characters)
-- **Character set options** (uppercase, lowercase, numbers, special)
-- **Leaked password detection**
-- **Strength analysis**
-- **Clipboard copying**
+## Offline Breach Detection
 
-**Example:**
-```
---- Password Generator ---
-Password length (default 16): 20
+Vector-Pass checks passwords against local wordlists (RockYou, darkc0de, etc.) without ever touching a network. Drop `.txt` files into `data/leaked_passwords/` and the tool picks them up.
 
-Generated Password: Xk8#pL$2@qZwR9*vMnB7!
-Strength: Very Strong
-Entropy: 128.45 bits
-```
+For large wordlists (millions of entries), the Bloom filter keeps things fast:
 
-#### 2. Check Password Strength
-- **Comprehensive strength analysis**
-- **Entropy calculation**
-- **Pattern detection**
-- **Leaked password checking**
-- **Improvement suggestions**
-
-**Example:**
-```
-Enter password to check: **********
-
-Strength Analysis:
-Strength: Weak (2/8)
-Length: 6 characters
-Entropy: 28.00 bits
-
-Recommendations:
-  - Password should be at least 8 characters long
-  - Add more character types (uppercase, numbers, special)
-  - This password has been found in data breaches - DO NOT USE!
-```
-
-#### 3. Manage Passwords
-- **Add new entries** (service, username, password, URL, notes)
-- **List all entries**
-- **Search entries**
-- **Retrieve passwords**
-- **Auto-copy to clipboard**
-
-### Adding Password Entries
-
-1. Select "Add Entry" from the Password Manager menu
-2. Fill in the details:
-   - **Service**: Website or application name
-   - **Username**: Your login username
-   - **Password**: The password (generated or manual)
-   - **URL**: Website URL (optional)
-   - **Notes**: Additional information (optional)
-
-### Searching and Retrieving
-
-- **List Entries**: View all stored services and usernames
-- **Search**: Find entries by service or username
-- **Get Password**: Retrieve and copy specific passwords
-
-## 🔧 Troubleshooting
-
-### Common Issues and Solutions
-
-#### ❌ "GPG encryption failed: No GPG keys found"
-**Solution:**
 ```bash
-# List your keys to verify
-gpg --list-keys
+# Build the filter from your wordlists
+python scripts/build_bloom_filter.py
 
-# If no keys, generate one
-gpg --full-generate-key
+# Options:
+#   --wordlist-dir     (default: data/leaked_passwords)
+#   --expected-items   (default: 50000000)
+#   --false-positive-rate (default: 0.01)
 ```
 
-#### ❌ "GPG decryption failed: Bad passphrase"
-**Solution:**
-- Ensure you're using the correct GPG passphrase
-- Check if caps lock is enabled
-- Try restarting GPG agent: `echo RELOADAGENT | gpg-connect-agent`
+The filter uses ~50MB regardless of how many passwords you throw at it. Trade-off is a ~1% false positive rate -- it might occasionally flag a clean password as leaked, but it will never miss an actually leaked one.
 
-#### ❌ "Warning: Leaked password directory not found"
-**Solution:**
-- Create the directory: `mkdir -p data/leaked_passwords`
-- Add password wordlist files to the directory
+## Troubleshooting
 
-#### ❌ "ModuleNotFoundError: No module named 'cryptography'"
-**Solution:**
+### "Failed to generate GPG key"
+
+Usually a GPG agent conflict:
 ```bash
-pip install cryptography
-# OR
-pip install -r requirements.txt
+pkill gpg-agent
+gpg-agent --daemon --homedir ./data/gpg
+# Then retry in the app
 ```
 
-#### ❌ Permission Errors (Linux/macOS)
-**Solution:**
+### "No GPG keys found"
+
 ```bash
-chmod 700 ~/.gnupg
-chmod 600 ~/.gnupg/*
+gpg --list-secret-keys
+# If empty, generate one (see GPG Setup above)
 ```
 
-#### ❌ GPG Agent Not Running
-**Solution:**
+### Permission issues
+
 ```bash
-echo RELOADAGENT | gpg-connect-agent
+chmod 700 data/gpg
+chmod 600 data/gpg/*
 ```
 
-### Debug Mode
+### Debug mode
 
-Enable debug output by setting environment variable:
 ```bash
-# Linux/macOS
-export PASSWORD_MANAGER_DEBUG=1
-python main.py
-
-# Windows
-set PASSWORD_MANAGER_DEBUG=1
+export VECTOR_PASS_DEBUG=1
 python main.py
 ```
 
-## 🛡️ Security Best Practices
+## Security Model
 
-### Password Management
-- **Use unique passwords** for every service
-- **Generate strong passwords** (16+ characters)
-- **Enable leaked password detection**
-- **Regularly update important passwords**
-- **Use passphrases** for memorable yet secure passwords
+### What Vector-Pass protects against
+- **Network interception** -- there is no network activity to intercept
+- **Remote compromise of password vault** -- encrypted at rest with two layers
+- **Credential stuffing** -- breach detection catches reused passwords
+- **Weak password generation** -- enforces character variety and length
 
-### Key Security
-- **Backup your GPG key**: 
-  ```bash
-  # Export public key
-  gpg --export -a "Your Name" > public.key
-  
-  # Export private key (secure storage!)
-  gpg --export-secret-keys -a "Your Name" > private.key
-  ```
+### What it does NOT protect against
+- Keyloggers or other malware on your machine
+- Compromised firmware/BIOS
+- Physical access + rubber hose
+- A sufficiently motivated state actor with access to your hardware
 
-- **Store backup keys** in secure offline locations
-- **Use strong passphrases** for your GPG key
-- **Set key expiration** and renew periodically
+If your threat model includes the last two, you have bigger problems than password management.
 
-### Application Security
-- **Lock your computer** when not in use
-- **Use full disk encryption**
-- **Keep the application updated**
-- **Regularly backup your password vault**
-- **Use antivirus software**
+## Security Hardening
 
-### Vault Management
-- **Regularly export backups** of your vault
-- **Test restoration** from backups
-- **Keep multiple backup copies** in different locations
-- **Secure your backup storage** with encryption
+For the particularly cautious:
 
-## 🔄 Backup and Recovery
+```bash
+# Clear shell history after sensitive ops
+history -c
 
-### Exporting Your Vault
-1. Use the "Export" function in the application
-2. Store encrypted backups in multiple locations
-3. Include your GPG key in the backup strategy
+# Secure-delete temp files
+shred -u temp_file.txt
 
-### Recovery Process
-1. **Restore GPG keys** (if needed):
-   ```bash
-   gpg --import private.key
-   ```
+# Drop filesystem caches (Linux)
+sudo sync && sudo echo 3 > /proc/sys/vm/drop_caches
+```
 
-2. **Restore vault file** to `data/vaults/` directory
+Consider:
+- Running on an air-gapped machine for password generation
+- Storing vault files on an encrypted USB
+- Using hardware RNG if available
+- Keeping vault backups encrypted with a different key
 
-3. **Use your AES password** and **GPG passphrase** to unlock
+## License
 
-## 📞 Support
-
-### Getting Help
-- **Check this guide** for common solutions
-- **Verify your setup** matches the requirements
-- **Enable debug mode** for detailed error information
-
-### Reporting Issues
-When reporting issues, please include:
-1. **Operating System** and version
-2. **Python version** (`python --version`)
-3. **GPG version** (`gpg --version`)
-4. **Error messages** and debug output
-5. **Steps to reproduce** the issue
-
-## 📄 License and Acknowledgments
-
-This application uses:
-- **cryptography** for AES encryption
-- **python-gnupg** for GPG integration
-- **Common password lists** for security checking
-
-*Always use password managers responsibly and keep your encryption keys secure.*
+This project is licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/en-US/MPL/2.0/).
 
 ---
 
-**Remember:** The security of your passwords depends on the strength of your master password and the protection of your encryption keys. Never share these with anyone and store them securely.
-
-*Last Updated: 19 October 2025*
+*Your passwords belong to you. Keep it that way.*

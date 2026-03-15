@@ -3,31 +3,92 @@ import math
 from typing import Dict, List, Tuple
 import os
 
+# Import the BloomFilter class
+try:
+    from bloom_filter import BloomFilter
+    BLOOM_FILTER_AVAILABLE = True
+except ImportError:
+    BLOOM_FILTER_AVAILABLE = False
+    print("Warning: Bloom filter not available. Using fallback method.")
+
+
 class PasswordStrengthChecker:
     def __init__(self, wordlist_dir: str = "data/leaked_passwords"):
         self.wordlist_dir = wordlist_dir
-        self.leaked_passwords = self._load_leaked_passwords()
+
+        # Try to load bloom filter, fall back to set if not available
+        if BLOOM_FILTER_AVAILABLE:
+            self.leaked_passwords = self._load_leaked_passwords_bloom()
+        else:
+            self.leaked_passwords = self._load_leaked_passwords()
+
         self.common_patterns = [
             '123456', 'password', 'qwerty', 'abc123', 'letmein', 'welcome',
             'monkey', 'dragon', 'master', 'hello', 'freedom', 'whatever'
         ]
-    
+
+    def _load_leaked_passwords_bloom(self):
+        """Load leaked passwords using Bloom filter for memory efficiency"""
+        bloom_file = os.path.join(self.wordlist_dir, "bloom_filter.dat")
+
+        try:
+            # Try to load existing bloom filter
+            if os.path.exists(bloom_file):
+                bf = BloomFilter.load(bloom_file)
+                print(f"Loaded Bloom filter with {bf.get_stats()['memory_usage_bytes'] / (1024*1024):.1f} MB memory usage")
+                return bf
+            else:
+                # Build new bloom filter from wordlists
+                print("Bloom filter not found, building from wordlists...")
+                bf = BloomFilter(expected_items=50000000, false_positive_rate=0.01)
+
+                # Load passwords from files
+                try:
+                    for filename in os.listdir(self.wordlist_dir):
+                        if filename.endswith('.txt'):
+                            filepath = os.path.join(self.wordlist_dir, filename)
+                            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                                for line in f:
+                                    password = line.strip()
+                                    if password:
+                                        bf.add(password)
+
+                    # Save the bloom filter for future use
+                    bf.save(bloom_file)
+                    print(f"Built Bloom filter with {bf.get_stats()['memory_usage_bytes'] / (1024*1024):.1f} MB memory usage")
+                    return bf
+
+                except FileNotFoundError:
+                    print("Warning: Leaked password directory not found")
+                    return bf  # Return empty bloom filter
+
+        except Exception as e:
+            print(f"Error loading Bloom filter: {e}")
+            print("Falling back to traditional set-based approach")
+            return self._load_leaked_passwords()
+
     def _load_leaked_passwords(self) -> set:
+        """Fallback method: Load leaked passwords into a set (high memory usage)"""
         leaked_set = set()
         try:
             for filename in os.listdir(self.wordlist_dir):
                 if filename.endswith('.txt'):
-                    with open(os.path.join(self.wordlist_dir, filename), 'r', 
+                    with open(os.path.join(self.wordlist_dir, filename), 'r',
                              encoding='utf-8', errors='ignore') as f:
                         for line in f:
                             leaked_set.add(line.strip().lower())
         except FileNotFoundError:
             print("Warning: Leaked password directory not found")
         return leaked_set
-    
+
     def is_password_leaked(self, password: str) -> bool:
         """Check if password exists in leaked databases"""
-        return password.lower() in self.leaked_passwords
+        if BLOOM_FILTER_AVAILABLE and hasattr(self.leaked_passwords, 'check'):
+            # Use Bloom filter check
+            return self.leaked_passwords.check(password)
+        else:
+            # Fallback to set membership
+            return password.lower() in self.leaked_passwords
     
     def calculate_entropy(self, password: str) -> float:
         """
@@ -249,56 +310,56 @@ class PasswordStrengthChecker:
         
     
         if len(password) < 8:
-            feedback.append("❌ Password should be at least 8 characters long")
+            feedback.append("[-] Password should be at least 8 characters long")
         elif len(password) < 12:
-            feedback.append("⚠️ Consider using 12+ characters for better security")
+            feedback.append("[!] Consider using 12+ characters for better security")
         else:
-            feedback.append("✅ Good password length")
+            feedback.append("[+] Good password length")
         
         if not checks['has_uppercase']:
-            feedback.append("❌ Add uppercase letters (A-Z)")
+            feedback.append("[-] Add uppercase letters (A-Z)")
         else:
-            feedback.append("✅ Contains uppercase letters")
+            feedback.append("[+] Contains uppercase letters")
         
         if not checks['has_lowercase']:
-            feedback.append("❌ Add lowercase letters (a-z)")
+            feedback.append("[-] Add lowercase letters (a-z)")
         else:
-            feedback.append("✅ Contains lowercase letters")
+            feedback.append("[+] Contains lowercase letters")
         
         if not checks['has_digits']:
-            feedback.append("❌ Add numbers (0-9)")
+            feedback.append("[-] Add numbers (0-9)")
         else:
-            feedback.append("✅ Contains numbers")
+            feedback.append("[+] Contains numbers")
         
         if not checks['has_special']:
-            feedback.append("❌ Add special characters (!@#$% etc.)")
+            feedback.append("[-] Add special characters (!@#$% etc.)")
         else:
-            feedback.append("✅ Contains special characters")
+            feedback.append("[+] Contains special characters")
         
     
         if not checks['no_repeats']:
-            feedback.append("⚠️ Avoid repeated characters")
+            feedback.append("[!] Avoid repeated characters")
         
         if not checks['no_sequences']:
-            feedback.append("❌ Avoid keyboard sequences (qwerty, 12345)")
+            feedback.append("[-] Avoid keyboard sequences (qwerty, 12345)")
         
         if not checks['no_common_patterns']:
-            feedback.append("❌ Avoid common words and patterns")
+            feedback.append("[-] Avoid common words and patterns")
         
        
         if leaked:
-            feedback.append("🚨 CRITICAL: This password has been found in data breaches!")
-            feedback.append("🚨 DO NOT USE THIS PASSWORD!")
+            feedback.append("[!!] CRITICAL: This password has been found in data breaches!")
+            feedback.append("[!!] DO NOT USE THIS PASSWORD!")
         
         
         if score < 40:
-            feedback.append("💡 Recommendation: Use a longer password with more character types")
+            feedback.append("Tip: Use a longer password with more character types")
         elif score < 60:
-            feedback.append("💡 Recommendation: Add special characters and avoid common patterns")
+            feedback.append("Tip: Add special characters and avoid common patterns")
         elif score < 80:
-            feedback.append("💡 Recommendation: Consider making it longer and more random")
+            feedback.append("Tip: Consider making it longer and more random")
         else:
-            feedback.append("🎉 Excellent! This is a strong password")
+            feedback.append("[+] Excellent -- this is a strong password")
         
         return feedback
     
@@ -332,7 +393,7 @@ if __name__ == "__main__":
         "MySuperSecureP@ssw0rd!2024"
     ]
     
-    print("🔐 Password Strength Analysis\n")
+    print("Password Strength Analysis\n")
     print("=" * 60)
     
     for pwd in test_passwords:
@@ -343,7 +404,7 @@ if __name__ == "__main__":
         print(f"Length: {result['length']} characters")
         print(f"Entropy: {result['entropy']} bits")
         print(f"Estimated Crack Time: {result['crack_time']}")
-        print(f"Leaked: {'❌ YES' if result['leaked'] else '✅ No'}")
+        print(f"Leaked: {'YES' if result['leaked'] else 'No'}")
         
         print("\nFeedback:")
         for fb in result['feedback'][:3]:  

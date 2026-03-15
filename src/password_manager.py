@@ -69,25 +69,63 @@ class DualLayerEncryption:
             raise Exception(f"AES decryption failed: {e}")
     
     def setup_gpg_key(self, name: str, email: str, passphrase: str) -> str:
+        """
+        Generate a new GPG key for encryption.
+
+        Troubleshooting GPG key generation issues:
+        1. If you get "agent_genkey failed: No such file or directory" errors:
+           - Kill conflicting GPG agent processes: ps aux | grep gpg-agent
+           - Restart clean GPG agent: gpg-agent --daemon --homedir [project_gpg_directory]
+        2. Ensure proper permissions on GPG directory (should be 700)
+        3. Check that GPG is properly installed and accessible
+
+        Args:
+            name (str): User's real name
+            email (str): User's email address
+            passphrase (str): Passphrase for the GPG key
+
+        Returns:
+            str: Fingerprint of the generated key
+
+        Raises:
+            Exception: If key generation fails with detailed error information
+        """
         try:
             print("Generating GPG key (this may take a moment)...")
-            
+
             input_data = self.gpg.gen_key_input(
                 name_real=name,
                 name_email=email,
                 passphrase=passphrase,
                 key_type="RSA",
-                key_length=2048
+                key_length=4096
             )
-            
+
             key = self.gpg.gen_key(input_data)
+
+            # Better error checking with detailed GPG error messages
             if not key:
-                raise Exception("Failed to generate GPG key")
-            
-            print(f"✅ GPG key created successfully: {key.fingerprint}")
+                raise Exception("GPG key generation returned None")
+
+            # Check if key generation was successful by verifying fingerprint
+            if not hasattr(key, 'fingerprint') or not key.fingerprint:
+                error_msg = "GPG key generation failed - no fingerprint generated"
+                # Include GPG stderr output if available for better diagnostics
+                if hasattr(key, 'stderr') and key.stderr:
+                    error_msg += f": {key.stderr.strip()}"
+                elif hasattr(key, 'status'):
+                    error_msg += f" (status: {key.status})"
+                raise Exception(error_msg)
+
+            # Check for any error messages even with successful fingerprint
+            if hasattr(key, 'stderr') and key.stderr and "error" in key.stderr.lower():
+                print(f"Warning during key generation: {key.stderr.strip()}")
+
+            print(f"[+] GPG key created successfully: {key.fingerprint}")
             return key.fingerprint
         except Exception as e:
-            raise Exception(f"GPG key setup failed: {e}")
+            # Preserve original exception but add context
+            raise Exception(f"GPG key setup failed: {str(e)}")
     
     def get_gpg_keys(self) -> List[Dict[str, str]]:
         try:
@@ -271,7 +309,7 @@ class PasswordManager:
                     return False
                 
                 gpg_recipient = self.encryption.setup_gpg_key(name, email, gpg_passphrase)
-                print(f"🔑 Remember your GPG passphrase: You'll need it to unlock this vault!")
+                print(f"[*] Remember your GPG passphrase: You'll need it to unlock this vault!")
             
             if not gpg_recipient:
                 keys = self.encryption.get_gpg_keys()
@@ -304,11 +342,11 @@ class PasswordManager:
                 f.write(encrypted_data)
             
             self.current_vault = vault_name
-            print(f"✅ Vault '{vault_name}' created successfully!")
+            print(f"[+] Vault '{vault_name}' created successfully!")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to create vault: {e}")
+            print(f"[-] Failed to create vault: {e}")
             return False
     
     def load_vault(self, vault_name: str, aes_password: str, gpg_passphrase: str = None) -> bool:
@@ -320,7 +358,7 @@ class PasswordManager:
                 return False
 
             if gpg_passphrase is None:
-                print(f"\n🔑 GPG Key required for vault '{vault_name}'")
+                print(f"\n[*] GPG Key required for vault '{vault_name}'")
                 gpg_passphrase = getpass.getpass("Enter GPG key passphrase: ")
             
 
@@ -343,12 +381,12 @@ class PasswordManager:
             self.current_vault = vault_name
             self.loaded = True
             
-            print(f"✅ Vault '{vault_name}' loaded successfully!")
-            print(f"📊 Entries loaded: {len(self.entries)}")
+            print(f"[+] Vault '{vault_name}' loaded successfully!")
+            print(f"    Entries loaded: {len(self.entries)}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to load vault: {e}")
+            print(f"[-] Failed to load vault: {e}")
             return False
     
     def save_vault(self, aes_password: str, gpg_passphrase: str = None) -> bool:
@@ -378,7 +416,7 @@ class PasswordManager:
             
 
             if gpg_passphrase is None:
-                print(f"\n🔑 GPG Key required to save vault '{self.current_vault}'")
+                print(f"\n[*] GPG Key required to save vault '{self.current_vault}'")
                 gpg_passphrase = getpass.getpass("Enter GPG key passphrase: ")
 
             encrypted_data = self.encryption.dual_encrypt(
@@ -391,11 +429,11 @@ class PasswordManager:
             with open(vault_path, 'w', encoding='utf-8') as f:
                 f.write(encrypted_data)
             
-            print(f"✅ Vault '{self.current_vault}' saved successfully!")
+            print(f"[+] Vault '{self.current_vault}' saved successfully!")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to save vault: {e}")
+            print(f"[-] Failed to save vault: {e}")
             return False
     
     def add_entry(self, service: str, username: str, password: str, 
@@ -422,11 +460,11 @@ class PasswordManager:
                 tags=tags or []
             )
             
-            print(f"✅ Entry added for {service}")
+            print(f"[+] Entry added for {service}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to add entry: {e}")
+            print(f"[-] Failed to add entry: {e}")
             return False
     
     def get_entry(self, service: str, username: str) -> Optional[PasswordEntry]:
@@ -487,7 +525,7 @@ class PasswordManager:
         entry_id = f"{service.lower()}_{username.lower()}"
         if entry_id in self.entries:
             del self.entries[entry_id]
-            print(f"✅ Entry deleted for {service}/{username}")
+            print(f"[+] Entry deleted for {service}/{username}")
             return True
         else:
             print(f"Entry not found for {service}/{username}")
@@ -514,11 +552,11 @@ class PasswordManager:
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(export_data, f, indent=2)
             
-            print(f"✅ Entries exported to {filename}")
+            print(f"[+] Entries exported to {filename}")
             return True
             
         except Exception as e:
-            print(f"❌ Export failed: {e}")
+            print(f"[-] Export failed: {e}")
             return False
     
     def import_entries(self, filename: str, import_password: str = None) -> bool:
@@ -542,11 +580,11 @@ class PasswordManager:
                 self.entries[entry_id] = entry
                 imported_count += 1
             
-            print(f"✅ Imported {imported_count} entries")
+            print(f"[+] Imported {imported_count} entries")
             return True
             
         except Exception as e:
-            print(f"❌ Import failed: {e}")
+            print(f"[-] Import failed: {e}")
             return False
     
     def get_vault_info(self) -> Dict[str, Any]:
@@ -564,227 +602,3 @@ class PasswordManager:
 
 
 
-def main():
-    print("🔐 Secure Password Manager with Dual-Layer Encryption")
-    print("=" * 50)
-    
-
-    os.makedirs("data/vaults", exist_ok=True)
-    
-    manager = PasswordManager()
-    
-    while True:
-        print("\nMain Menu:")
-        print("1. Create New Vault")
-        print("2. Load Existing Vault")
-        print("3. Manage GPG Keys")
-        print("4. Exit")
-        
-        choice = input("\nSelect option: ").strip()
-        
-        if choice == '1':
-            create_vault_flow(manager)
-        elif choice == '2':
-            load_vault_flow(manager)
-        elif choice == '3':
-            manage_gpg_keys_flow(manager)
-        elif choice == '4':
-            print("Goodbye! 👋")
-            break
-        else:
-            print("Invalid option!")
-
-def create_vault_flow(manager):
-    print("\n--- Create New Vault ---")
-    vault_name = input("Enter vault name: ").strip()
-    
-    aes_password = getpass.getpass("Set AES encryption password: ")
-    confirm_password = getpass.getpass("Confirm AES password: ")
-    
-    if aes_password != confirm_password:
-        print("❌ Passwords don't match!")
-        return
-    
-    setup_gpg = input("Setup new GPG key? (y/n): ").lower() == 'y'
-    
-    if manager.create_vault(vault_name, aes_password, setup_new_gpg=setup_gpg):
- 
-        if setup_gpg:
-            print("\n--- Loading New Vault ---")
-            gpg_passphrase = getpass.getpass("Enter GPG passphrase to unlock vault: ")
-            if manager.load_vault(vault_name, aes_password, gpg_passphrase):
-                vault_menu(manager, aes_password, gpg_passphrase)
-        else:
-            if manager.load_vault(vault_name, aes_password):
-                vault_menu(manager, aes_password)
-
-def load_vault_flow(manager):
-    print("\n--- Load Vault ---")
-    vaults = manager.list_vaults()
-    
-    if not vaults:
-        print("No vaults found! Create one first.")
-        return
-    
-    print("Available vaults:")
-    for i, vault in enumerate(vaults, 1):
-        print(f"{i}. {vault}")
-    
-    try:
-        choice = int(input("Select vault: ")) - 1
-        vault_name = vaults[choice]
-    except (ValueError, IndexError):
-        print("Invalid selection!")
-        return
-    
-    aes_password = getpass.getpass("Enter AES password: ")
-    
-    if not manager.load_vault(vault_name, aes_password):
-
-        print("\nGPG decryption failed. Please provide GPG passphrase.")
-        gpg_passphrase = getpass.getpass("Enter GPG key passphrase: ")
-        if manager.load_vault(vault_name, aes_password, gpg_passphrase):
-            vault_menu(manager, aes_password, gpg_passphrase)
-    else:
-        vault_menu(manager, aes_password)
-
-def manage_gpg_keys_flow(manager):
-    print("\n--- GPG Key Management ---")
-    print("1. List GPG Keys")
-    print("2. Create New GPG Key")
-    print("3. Back")
-    
-    choice = input("Select option: ").strip()
-    
-    if choice == '1':
-        try:
-            keys = manager.encryption.get_gpg_keys()
-            if not keys:
-                print("No GPG keys found.")
-            else:
-                print("\nAvailable GPG Keys:")
-                for key in keys:
-                    print(f"• {key['uid']} ({key['fingerprint'][-8:]}) - {key['type']}")
-        except Exception as e:
-            print(f"Error listing keys: {e}")
-    
-    elif choice == '2':
-        name = input("Enter your name: ")
-        email = input("Enter your email: ")
-        passphrase = getpass.getpass("Set GPG key passphrase: ")
-        confirm = getpass.getpass("Confirm passphrase: ")
-        
-        if passphrase != confirm:
-            print("Passphrases don't match!")
-            return
-        
-        try:
-            fingerprint = manager.encryption.setup_gpg_key(name, email, passphrase)
-            print(f"✅ GPG key created: {fingerprint}")
-        except Exception as e:
-            print(f"❌ Failed to create GPG key: {e}")
-
-def vault_menu(manager, aes_password, gpg_passphrase=None):
-    while True:
-        print(f"\n--- Vault: {manager.current_vault} ---")
-        print("1. Add Entry")
-        print("2. List Entries")
-        print("3. Search Entries")
-        print("4. Get Password")
-        print("5. Delete Entry")
-        print("6. Vault Info")
-        print("7. Save & Back to Main Menu")
-        
-        choice = input("\nSelect option: ").strip()
-        
-        if choice == '1':
-            add_entry_flow(manager)
-        elif choice == '2':
-            list_entries_flow(manager)
-        elif choice == '3':
-            search_entries_flow(manager)
-        elif choice == '4':
-            get_password_flow(manager)
-        elif choice == '5':
-            delete_entry_flow(manager)
-        elif choice == '6':
-            vault_info_flow(manager)
-        elif choice == '7':
-            manager.save_vault(aes_password, gpg_passphrase)
-            break
-        else:
-            print("Invalid option!")
-
-def add_entry_flow(manager):
-    print("\n--- Add New Entry ---")
-    service = input("Service: ")
-    username = input("Username: ")
-    password = getpass.getpass("Password: ")
-    url = input("URL (optional): ")
-    notes = input("Notes (optional): ")
-    
-    if manager.add_entry(service, username, password, url, notes):
-        print("✅ Entry added successfully!")
-
-def list_entries_flow(manager):
-    entries = manager.list_entries()
-    if not entries:
-        print("No entries found.")
-        return
-    
-    print(f"\n--- Entries ({len(entries)}) ---")
-    for i, entry in enumerate(entries, 1):
-        print(f"{i}. {entry['service']} - {entry['username']}")
-
-def search_entries_flow(manager):
-    query = input("Search (service, username, or tags): ")
-    results = manager.search_entries(query)
-    
-    if not results:
-        print("No matches found.")
-        return
-    
-    print(f"\n--- Search Results ({len(results)}) ---")
-    for i, entry in enumerate(results, 1):
-        print(f"{i}. {entry['service']} - {entry['username']}")
-
-def get_password_flow(manager):
-    service = input("Service: ")
-    username = input("Username: ")
-    
-    entry = manager.get_entry(service, username)
-    if entry:
-        print(f"\n--- Entry Details ---")
-        print(f"Service: {entry.service}")
-        print(f"Username: {entry.username}")
-        print(f"Password: {entry.password}")
-        print(f"URL: {entry.url}")
-        print(f"Notes: {entry.notes}")
-        
-        copy = input("\nCopy password to clipboard? (y/n): ").lower()
-        if copy == 'y':
-            try:
-                import pyperclip
-                pyperclip.copy(entry.password)
-                print("✅ Password copied to clipboard!")
-            except ImportError:
-                print("pyperclip not installed")
-    else:
-        print("Entry not found!")
-
-def delete_entry_flow(manager):
-    service = input("Service: ")
-    username = input("Username: ")
-    
-    if manager.delete_entry(service, username):
-        print("✅ Entry deleted!")
-
-def vault_info_flow(manager):
-    info = manager.get_vault_info()
-    if info:
-        print(f"\n--- Vault Information ---")
-        for key, value in info.items():
-            print(f"{key.replace('_', ' ').title()}: {value}")
-
-if __name__ == "__main__":
-    main()
