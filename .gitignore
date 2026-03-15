@@ -190,4 +190,4 @@ docs/PASSWORD_DATASET_EXPANSION_SUMMARY.md
 # Sensitive data directories
 data/gpg/
 data/vaults/
-data/leaked_passwords/
+data/leaked_passwords/rockyou.txt
